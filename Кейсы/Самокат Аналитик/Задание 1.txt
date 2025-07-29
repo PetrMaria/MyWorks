@@ -1,0 +1,103 @@
+1. Вывести все товары, в наименовании которых содержится «самокат» (без учета регистра), и срок годности которых не превышает 7 суток. Данные на выходе – наименование товара, срок годности		
+
+
+SELECT name, sheff_life 
+FROM product
+WHERE LOWER(name) LIKE '%самокат%' AND sheff_life <= 7
+
+															
+2. Посчитать количество работающих складов на текущую дату по каждому городу. Вывести только те города, у которых количество складов более 50. Данные на выходе - город, количество складов
+
+SELECT city, COUNT(*) AS count_warehouses
+FROM warehouse
+WHERE date_open <= '2021-09-01'
+AND (date_close IS NULL OR date_close > '2021-09-01')
+GROUP BY city
+HAVING COUNT(*) > 50;
+
+
+								
+3.Посчитать среднее количество товаров (SKU) на 1 склад, которые продавались в июне 2020 года, данные вывести в разрезе городов. Данные на выходе - город, количество складов, количество товаров с продажами на 1 склад
+
+WITH sold_products AS (
+    SELECT DISTINCT product_id
+    FROM order_line
+    WHERE date >= '2020-06-01' AND date < '2020-07-01'
+),
+warehouse_sales AS (
+    SELECT warehouse_id, COUNT(DISTINCT product_id) AS product_count
+    FROM order_line
+    WHERE product_id IN (SELECT product_id FROM sold_products)
+    GROUP BY warehouse_id
+)
+SELECT 
+    w.city,
+    COUNT(DISTINCT w.warehouse_id) AS warehouse_count,
+    AVG(ws.product_count) AS avg_products_per_warehouse
+FROM 
+    warehouse_sales ws
+JOIN 
+    warehouses w ON ws.warehouse_id = w.warehouse_id
+GROUP BY 
+    w.city;
+
+								
+4.Посчитать количество заказов и количество клиентов в разрезе месяцев за 2021 год по каждому из городов.			
+Данные на выходе – город/компания, месяц, количество заказов, количество клиентов	
+
+SELECT  w.sity,
+	EXTRACT(MONTH FROM o.date) AS month,
+ 	COUNT(order_id) AS count_orders,
+	COUNT(DISTINCT(user_id)) AS count_users
+FROM orders o 
+JOIN warehouses w ON o.warehouse_id = w.warehouse_id
+WHERE EXTRACT(YEAR FROM o.date) = 2021
+GROUP BY w.city, month
+
+							
+5.       Посчитать средний заказ в рублях по каждому складу за последние 14 дней, при этом вывести в алфавитном порядке наименования только тех складов, где средний заказ выше, чем средний заказ по городу.								
+Данные на выходе – наименование склада, город, средний заказ по складу, средний заказ по городу	
+
+WITH warehouse_orders AS (
+    SELECT 
+        w.warehouse_id,
+        w.name,
+        w.city,
+        AVG(o.paid_amount) AS avg_order_amount
+    FROM 
+        orders o
+    JOIN 
+        warehouses w ON o.warehouse_id = w.warehouse_id
+    WHERE 
+        o.date >= CURRENT_DATE - INTERVAL '14 days'
+    GROUP BY 
+        w.warehouse_id, w.name, w.city
+),
+city_orders AS (
+    SELECT 
+        w.city,
+        AVG(o.paid_amount) AS avg_city_order_amount
+    FROM 
+        orders o
+    JOIN 
+        warehouses w ON o.warehouse_id = w.warehouse_id
+    WHERE 
+        o.date >= CURRENT_DATE - INTERVAL '14 days'
+    GROUP BY 
+        w.city
+)
+SELECT 
+    wo.name AS warehouse_name,
+    wo.city,
+    wo.avg_order_amount AS avg_warehouse_order,
+    co.avg_city_order_amount AS avg_city_order
+FROM 
+    warehouse_orders wo
+JOIN 
+    city_orders co ON wo.city = co.city
+WHERE 
+    wo.avg_order_amount > co.avg_city_order_amount
+ORDER BY 
+    wo.name;
+
+														
